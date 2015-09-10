@@ -1,0 +1,186 @@
+---
+output: html_document
+---
+#Storm Data Analysis
+
+##Title
+Data from  U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database analysed to observe the impact of Environmental disasters on human life and property.
+
+
+##Synopsis
+The data frm the NOAA Storm Database reports the characteristics of major storms and weather events in the United States recorded from start in the year 1950 and end in November 2011, and notes various details like when did it occur, the area  of the affected territory, healty and property damage to the affected people. We analyse the data to understand which are the major environmental calamities which has caused the maximum damage both in terms of the human health and economic consequence in trhe recorded period, so that we can take requiste steps to prevent and prepare against devastating outcomes. 
+
+##Data Processing
+
+###Health Impact
+We will first load the compressed bz2 file into a dataset. Then for answering we need some specific colum and we will look at the first 5 observations.
+```{r cache=TRUE,warning=FALSE}
+stormData=read.csv(bzfile("stormData.csv.bz2"))
+colNames=c("EVTYPE","FATALITIES","INJURIES","PROPDMG","PROPDMGEXP","CROPDMG","CROPDMGEXP")
+preStormData=stormData[,names(stormData) %in% colNames]
+head(preStormData,3)
+```
+
+
+
+To find out what are the impacts of the different weather events on people's health we will add the total no. of dead and total no. of injured for each kind of events and then we will add both to estimate the total health impact by each recorded event.Then we will try to understand what is the range of the maximum impact on people's lives by using the quantile values in 10 intervals.
+```{r results='hold'}
+totalDead=tapply(preStormData$FATALITIES,preStormData$EVTYPE,sum)
+totalInjured=tapply(preStormData$INJURIES,preStormData$EVTYPE,sum)
+preStormData$healthImpact=preStormData$FATALITIES+preStormData$INJURIES
+totalAffected=tapply(preStormData$healthImpact,preStormData$EVTYPE,sum)
+print("The quantile values of total FATAL cases by each weather event with 10 regular intervals .\n")
+quantile(totalDead,probs = seq(0.0,1.0,by=0.1))
+print("\nThe quantile values of total INJURED cases by each weather event with 10 regular intervals .\n")
+quantile(totalInjured,probs = seq(0.0,1.0,by=0.1))
+```
+
+
+From the quantile distributions we can see that most of the weather events has nearly no fatality or injured cases reported and very few cases, which are represented in the uppermost quantile has strong cases of damage. So we will look at the uppermost quantile more closely.
+```{r results='hold'}
+print("\nThe uppermost quantile values of FATAL cases with probabilty greater than 0.95 .\n")
+quantile(totalDead,probs = seq(0.95,1.0,by=0.01))
+print("\nThe uppermost quantile values of INJURED cases with probabilty greater than 0.95 .\n")
+quantile(totalInjured,probs = seq(0.95,1.0,by=0.01))
+```
+Now from the above quantile distribution we can see that to find out which weather event has caused the maximum fatal and injured cases we can consider the cases which are 99 quantile above in their respective distributions.We can see that the no.of events beyound the 99 quantile will give us a good idea of which events are causing the most devastating health effects.
+```{r results='hold'}
+maxDeadLowerLimit=quantile(totalDead,probs = 0.99)
+maxInjuredLowerLimit=quantile(totalInjured,probs = 0.99)
+cat("No. of weather events causing the maximum FATAL cases and is greater or equal to 99th quantile value :\n",sum(totalDead>maxDeadLowerLimit),"\n")
+cat("No. of weather events causing the maximum INJURED cases and is greater or equal to 99th quantile value :\n",sum(totalInjured>maxInjuredLowerLimit),"\n")
+```
+</br>
+</br>
+</br>
+
+
+###Health Impact
+The economic impact of the natural disasters could be assesed from the property and crop damage created by each event.The values of the  variables gives the monetary unit. But we knew that the data collected in the initial years had many errors and were misguided.As we are looking for the maximum damage, values than 'K','M','B' for thousands, millionsand, billions can be taken as 0.So we need to clean our dataset to get rid of the unwanted values.
+
+```{r}
+#the monetary character exponenets in PROPDMGEXP column are converted #to their numerical values to estimate economic loss by crop damage
+preStormData$PROPDMGEXP=as.character(preStormData$PROPDMGEXP)
+preStormData$PROPDMGEXP[!(preStormData$PROPDMGEXP %in% c("K","M","B"))]="0"
+preStormData$PROPDMGEXP[preStormData$PROPDMGEXP=="K"]="1000"
+preStormData$PROPDMGEXP[preStormData$PROPDMGEXP=="M"]="1000000"
+preStormData$PROPDMGEXP[preStormData$PROPDMGEXP=="B"]="1000000000"
+preStormData$PROPDMGEXP=as.integer(preStormData$PROPDMGEXP)
+
+#the monetary character exponenets in CROPDMGEXP column are converted #to their numerical values to estimate total property damage
+reStormData$CROPDMGEXP=as.character(preStormData$CROPDMGEXP)
+preStormData$CROPDMGEXP[!(preStormData$CROPDMGEXP %in% c("K","M","B"))]="0"
+preStormData$CROPDMGEXP[preStormData$CROPDMGEXP=="K"]="1000"
+preStormData$CROPDMGEXP[preStormData$CROPDMGEXP=="M"]="1000000"
+preStormData$CROPDMGEXP[preStormData$CROPDMGEXP=="B"]="1000000000"
+preStormData$CROPDMGEXP=as.integer(preStormData$CROPDMGEXP)
+
+head(preStormData,3)
+```
+
+Now the PROPDMGEXP and CROPDMGEXP variables has only interested values. The crop and property property damage has been evaluated separtely and then added to evaluate the total damage by each weather event occurance.The dataset with the added columns is now ready to be analysed.We will follow the same steps as in the previous analysis and look at the quantile values but this time we will narrow it down to values with probability greater than 0.90.
+```{r results="hold"}
+preStormData$CROP=preStormData$CROPDMG*preStormData$CROPDMGEXP
+preStormData$PROP=preStormData$PROPDMG*preStormData$PROPDMGEXP
+preStormData$TOTALDMG=preStormData$CROP+preStormData$PROP
+cropDamage=tapply(preStormData$CROP,preStormData$EVTYPE,sum)
+propDamage=tapply(preStormData$PROP,preStormData$EVTYPE,sum)
+ecoDamage=tapply(preStormData$TOTALDMG,preStormData$EVTYPE,sum)
+head(preStormData,3)
+print("The quantile values of CROP DAMAGE with more than or equal to 0.90 probability .\n")
+quantile(cropDamage,probs = seq(0.90,1.0,by=0.02))
+print("\nThe quantile values of PROPERTY DAMAGE with more than or equal to 0.90 probability .\n")
+quantile(propDamage,probs = seq(0.90,1.0,by=0.02))
+```
+As we looking for maximum damage events, then if there are enough cases we can just look at the quantile values beyound 0.99 probability and get an idea of the natural disasters which are causing the maximum economic consequences.
+```{r results="hold"}
+maxCropLowerLimit=quantile(cropDamage,probs = 0.99)
+maxPropLowerLimit=quantile(propDamage,probs = 0.99)
+cat("No. of cases with values greater than or equal 99th quantile value with repect to CROP DAMAGE:",  sum(cropDamage>maxCropLowerLimit),"\n")
+cat("No. of cases with values greater than or equal 99th quantile value with repect to PROPERTY DAMAGE:",  sum(propDamage>maxPropLowerLimit),"\n")
+
+```
+
+Additionaly we can look and compare the economic and health damage by the weather events if we add the injured and fatal cases together while in the other case we simply add the crop and property damage together. This can give us a comparative study of the economic and health damage by the events which are causing the maximum damage overall.
+```{r results="hold"}
+maxEcoLowerLimit=quantile(ecoDamage,probs = 0.99)
+maxHealthLowerLimit=quantile(totalAffected,probs = 0.99)
+cat("No. of cases with values greater than or equal 99th quantile value with respect to TOTAL ECONOMIC LOSS:",  sum(ecoDamage>maxEcoLowerLimit),"\n")
+cat("No. of cases with values greater than or equal 99th quantile value with respect to TOTAL HEALTH VICTIMS:",  sum(totalAffected>maxHealthLowerLimit),"\n")
+
+```
+
+We can see that there are 7 events, each of health and economic cases which are causing the maximum havoc.Now to compare their impact on an equal scale we will consider the percentage of impact by each event to the total impact of all events ,each in health and economy separately.
+```{r results="hold"}
+
+#subsets of total health and economic cost lying beyond 99th quantile
+healthSet=totalAffected[totalAffected>maxHealthLowerLimit]
+economySet=ecoDamage[ecoDamage>maxEcoLowerLimit]
+ 
+#sum of all the people ana economy affected in the recorded events 
+sumHealth=sum(totalAffected)
+sumEconomy=sum(ecoDamage)
+
+#disasters which caused maximum havoc in health and economy separately #are combined here 
+topContributorEvents=union(names(healthSet),names(economySet))
+
+#impact of each weather event is transformed to a percentile value #with respect to the total damage
+percentHealth=(totalAffected/sumHealth)*100
+percentEco=(ecoDamage/sumEconomy)*100
+
+#the percentile damage by the most devastating events are combined to #form a table
+subPercentHealth=percentHealth[topContributorEvents]
+subPercentEconomy=percentEco[topContributorEvents]
+damageTable=cbind(subPercentHealth,subPercentEconomy)
+colnames(damageTable)=c("Health","Economy")
+
+head(damageTable,3)
+```
+##Results
+
+
+###Human Health Impact Results
+
+From the analysis we can point out the 6 weather events which caused the maximum death reports whereas 7 of them which reported the maximum injured cases.We will look at a barplot in both the cases to find out which disasters caused the maximum damage to human health.
+
+```{r fig.height=5,fig.width=10}
+par(mfcol=c(1,2))
+barplot(totalDead[totalDead>maxDeadLowerLimit],names.arg = substr(names(totalDead[totalDead>maxDeadLowerLimit]),0,8),col="darkblue",main="FATAL CASES ",xlab = "Environmental Disasters",ylab = "Total Fatal Cases",cex.main=0.8,cex.lab=0.7,font.main=2,font.lab=2,col.main="darkblue",cex.names = 0.5)
+barplot(totalInjured[totalInjured>maxInjuredLowerLimit],names.arg = substr(names(totalInjured[totalInjured>maxInjuredLowerLimit]),0,8),col="darkgreen",main="INJURED CASES ",xlab = "Environmental Disasters",ylab = "Total Injured Cases",cex.main=0.8,cex.lab=0.7,font.main=2,font.lab=2,col.main="darkgreen",cex.names = 0.5,font.lab=2)
+
+box(which = "outer", lty = "solid", col=288,lwd=2)
+```
+
+The graph shows that it is very evident that Tornado has caused most health damage both in terms of fatal and injured cases.
+
+
+###Economic Impact Plot
+
+From the analysis we know that 7 weather events has resulted in maximum economic damage. We will create a barplot to find out where which ones are those.
+
+```{r fig.height=5,fig.width=10}
+par(mfcol=c(1,2))
+barplot(cropDamage[cropDamage>maxCropLowerLimit],names.arg = substr(names(cropDamage[cropDamage>maxCropLowerLimit]),0,8),col="darkblue",main="CROP DAMAGE ",xlab = "Environmental Disasters",ylab = "Economic Loss",cex.main=0.8,cex.lab=0.7,font.main=2,font.lab=2,col.main="darkblue",cex.names = 0.5)
+barplot(propDamage[propDamage>maxPropLowerLimit],names.arg = substr(names(propDamage[propDamage>maxPropLowerLimit]),0,8),col="darkgreen",main="PROPERTY DAMAGE",xlab = "Environmental Disasters",ylab = "Economic Loss",cex.main=0.8,cex.lab=0.7,font.main=2,font.lab=2,col.main="darkgreen",cex.names = 0.5,font.lab=2)
+
+box(which = "outer", lty = "solid", col=288,lwd=2)
+```
+
+The plot has shown us that while Ice Storm and River Flow has caused the maximum crop damage, on the other hand tornadoes once again has caused the maximum property damage.
+
+###Overall Impact
+
+As in the analysis phase we calculated the percentage imapct of the most damaging natural disasters in health and economy separately , we will now again use a barplot to compare the impact of each of those events in the two different cases of health and economy.
+```{r fig.height=5,fig.width=10}
+par(mfcol=c(1,1))
+barplot(t(damageTable),col= c("darkblue","darkgreen"),beside = T,names.arg = substr(col.names(t(amageTable)),0,8),
+legend=row.names(t(damageTable)),main="Comparative Impact by Percentage Loss",xlab = "Environmental Disasters",ylab = "Percentage Loss",cex.main=1.0,cex.lab=1.0,font.main=2,font.lab=2,col.main="slategray",cex.names = 0.5,font.lab=2,col.lab="slategray")
+
+box(which = "outer", lty = "solid", col=288,lwd=2)
+
+```
+As we can see it is very evident from the graph Tornado causes the maximum damage in U.S both in terms health and economic loss.
+
+##Discussion
+
+Here to calculate the overall impact we have added up the total number of dead people and total no. of injured cases, but it can be challegened in practical cases as we cannot equate death of a person as equal to receiving some minor injury.
